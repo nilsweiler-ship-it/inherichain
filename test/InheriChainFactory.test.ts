@@ -132,6 +132,13 @@ describe("InheriChainFactory", function () {
         factory.connect(owner).registerHeir(planAddress, ethers.ZeroAddress)
       ).to.be.revertedWith("Invalid heir");
     });
+
+    it("should reject duplicate heir registration", async function () {
+      await factory.connect(owner).registerHeir(planAddress, heir1.address);
+      await expect(
+        factory.connect(owner).registerHeir(planAddress, heir1.address)
+      ).to.be.revertedWith("Already registered");
+    });
   });
 
   describe("View Functions", function () {

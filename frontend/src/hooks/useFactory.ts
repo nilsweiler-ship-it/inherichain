@@ -27,10 +27,10 @@ export function useFactory() {
     const receipt = await waitForTransactionReceipt(config, { hash });
 
     // Parse PlanCreated event to get plan address
-    const iface = await import("viem");
+    const { decodeEventLog } = await import("viem");
     const log = receipt.logs.find((l) => {
       try {
-        const decoded = iface.decodeEventLog({
+        const decoded = decodeEventLog({
           abi: factoryAbi,
           data: l.data,
           topics: l.topics,
@@ -42,7 +42,7 @@ export function useFactory() {
     });
 
     if (log) {
-      const decoded = iface.decodeEventLog({
+      const decoded = decodeEventLog({
         abi: factoryAbi,
         data: log.data,
         topics: log.topics,

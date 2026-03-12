@@ -4,9 +4,13 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+if (!process.env.PINATA_API_KEY || !process.env.PINATA_SECRET_API_KEY) {
+  throw new Error("Missing PINATA_API_KEY or PINATA_SECRET_API_KEY environment variables");
+}
+
 const pinata = new pinataSDK(
-  process.env.PINATA_API_KEY!,
-  process.env.PINATA_SECRET_API_KEY!
+  process.env.PINATA_API_KEY,
+  process.env.PINATA_SECRET_API_KEY
 );
 
 export async function pinFile(

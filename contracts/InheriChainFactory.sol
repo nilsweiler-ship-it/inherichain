@@ -9,6 +9,7 @@ contract InheriChainFactory {
     mapping(address => address[]) public ownerPlans;
     mapping(address => address[]) public heirPlans;
     mapping(address => address[]) public verifierPlans;
+    mapping(address => mapping(address => bool)) private heirRegistered;
 
     event PlanCreated(address indexed plan, address indexed owner, string planName);
     event HeirRegistered(address indexed plan, address indexed heir);
@@ -43,7 +44,9 @@ contract InheriChainFactory {
         InheritancePlan plan = InheritancePlan(payable(_plan));
         require(msg.sender == plan.owner(), "Only plan owner");
         require(plan.isHeir(_heir), "Not heir on plan");
+        require(!heirRegistered[_heir][_plan], "Already registered");
 
+        heirRegistered[_heir][_plan] = true;
         heirPlans[_heir].push(_plan);
         emit HeirRegistered(_plan, _heir);
     }

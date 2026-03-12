@@ -12,7 +12,7 @@ import { ClaimCard } from "../components/claim/ClaimCard";
 import { DocumentUpload } from "../components/claim/DocumentUpload";
 import { ApproveRejectButtons } from "../components/verification/ApproveRejectButtons";
 import { formatEth, formatBasisPoints, formatTimeRemaining, shortenAddress } from "../utils/formatters";
-import { CONDITION_LABELS } from "../types";
+import { CONDITION_LABELS, ClaimStatus, ConditionType } from "../types";
 import type { Claim } from "../types";
 import { readContract } from "@wagmi/core";
 import { config } from "../config/wagmi";
@@ -162,7 +162,7 @@ export function PlanDetailPage() {
                   <p className="text-sm font-mono text-gray-300">{shortenAddress(heir.wallet)}</p>
                   <p className="text-xs text-gray-500">
                     {CONDITION_LABELS[heir.condition]}
-                    {heir.condition === 4 && ` (age ${Number(heir.ageThreshold)})`}
+                    {heir.condition === ConditionType.Age && ` (age ${Number(heir.ageThreshold)})`}
                   </p>
                 </div>
                 <span className="text-gold font-bold">{formatBasisPoints(heir.sharePercentage)}</span>
@@ -185,14 +185,14 @@ export function PlanDetailPage() {
                   claim={claim}
                   claimId={id}
                   isClaimant={userAddress?.toLowerCase() === claim.heir.toLowerCase()}
-                  onDistribute={(cid) => {
-                    distribute(planAddress, cid)
+                  onDistribute={() => {
+                    distribute(planAddress, id)
                       .then(() => { toast.success("Distributed!"); window.location.reload(); })
                       .catch(() => toast.error("Distribution failed"));
                   }}
                   distributing={claimLoading}
                 />
-                {isVerifier && claim.status === 1 && (
+                {isVerifier && claim.status === ClaimStatus.Pending && (
                   <ApproveRejectButtons
                     onApprove={() => {
                       vote(planAddress, id, true)

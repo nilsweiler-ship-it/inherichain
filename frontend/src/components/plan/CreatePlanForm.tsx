@@ -14,6 +14,7 @@ import { useInheritancePlan } from "../../hooks/useInheritancePlan";
 import { ConditionType } from "../../types";
 import type { HeirFormData } from "../../types";
 import { MIN_INACTIVITY_DAYS, BASIS_POINTS } from "../../utils/constants";
+import { isAddress } from "viem";
 
 const STEPS = ["Plan Details", "Verifiers", "Heirs", "Review & Fund"];
 
@@ -50,6 +51,10 @@ export function CreatePlanForm() {
   function addHeir() {
     if (!newHeirWallet || newHeirShare <= 0) {
       toast.error("Fill in heir details");
+      return;
+    }
+    if (!isAddress(newHeirWallet)) {
+      toast.error("Invalid Ethereum address for heir");
       return;
     }
     if (totalShares + newHeirShare > BASIS_POINTS) {
@@ -162,7 +167,13 @@ export function CreatePlanForm() {
           <Input label="Verifier 3" placeholder="0x..." value={verifier3} onChange={(e) => setVerifier3(e.target.value)} />
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setStep(0)}>Back</Button>
-            <Button onClick={() => setStep(2)} disabled={!verifier1 || !verifier2 || !verifier3}>
+            <Button onClick={() => {
+              if (!isAddress(verifier1) || !isAddress(verifier2) || !isAddress(verifier3)) {
+                toast.error("All verifier addresses must be valid Ethereum addresses");
+                return;
+              }
+              setStep(2);
+            }} disabled={!verifier1 || !verifier2 || !verifier3}>
               Next
             </Button>
           </div>

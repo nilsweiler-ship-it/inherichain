@@ -4,9 +4,9 @@ import multer from "multer";
 import { pinFile } from "./pinata";
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 
-app.use(cors({ origin: "http://localhost:5173" }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173" }));
 
 const upload = multer({ storage: multer.memoryStorage() });
 

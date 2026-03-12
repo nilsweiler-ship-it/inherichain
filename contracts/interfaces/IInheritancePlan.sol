@@ -34,6 +34,7 @@ interface IInheritancePlan {
         uint256 approvals;
         uint256 rejections;
         uint256 submittedAt;
+        uint256 heirShare; // snapshot of heir's share at claim time
     }
 
     event HeirAdded(address indexed heir, uint256 sharePercentage, ConditionType condition);

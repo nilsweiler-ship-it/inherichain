@@ -30,6 +30,7 @@ export interface Claim {
   approvals: bigint;
   rejections: bigint;
   submittedAt: bigint;
+  heirShare: bigint;
 }
 
 export interface PlanDetails {

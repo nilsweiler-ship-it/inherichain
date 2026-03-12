@@ -338,6 +338,11 @@
         "internalType": "uint256",
         "name": "submittedAt",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "heirShare",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -462,6 +467,11 @@
           {
             "internalType": "uint256",
             "name": "submittedAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "heirShare",
             "type": "uint256"
           }
         ],

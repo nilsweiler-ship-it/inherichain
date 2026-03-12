@@ -147,19 +147,21 @@ contract InheritancePlan is IInheritancePlan, ReentrancyGuard {
 
     function submitClaim(string calldata _documentCID) external onlyHeir ownerInactive {
         uint256 claimId = claims.length;
+        uint256 share = heirs[heirIndex[msg.sender]].sharePercentage;
         claims.push(Claim({
             heir: msg.sender,
             documentCID: _documentCID,
             status: ClaimStatus.Pending,
             approvals: 0,
             rejections: 0,
-            submittedAt: block.timestamp
+            submittedAt: block.timestamp,
+            heirShare: share
         }));
 
         emit ClaimSubmitted(claimId, msg.sender, _documentCID);
     }
 
-    function vote(uint256 _claimId, bool _approve) external onlyVerifier {
+    function vote(uint256 _claimId, bool _approve) external onlyVerifier nonReentrant {
         require(_claimId < claims.length, "Invalid claim");
         Claim storage claim = claims[_claimId];
         require(claim.status == ClaimStatus.Pending, "Claim not pending");
@@ -194,7 +196,8 @@ contract InheritancePlan is IInheritancePlan, ReentrancyGuard {
 
         claim.status = ClaimStatus.Distributed;
 
-        uint256 heirShare = heirs[heirIndex[claim.heir]].sharePercentage;
+        uint256 heirShare = claim.heirShare;
+        require(distributedShare + heirShare <= BASIS_POINTS, "Share overflow");
         uint256 amount = (address(this).balance * heirShare) / (BASIS_POINTS - distributedShare);
         distributedShare += heirShare;
 
