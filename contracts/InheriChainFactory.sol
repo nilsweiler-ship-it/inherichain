@@ -2,9 +2,12 @@
 pragma solidity ^0.8.24;
 
 import "./InheritancePlan.sol";
+import "./VerifierRegistry.sol";
 import "./interfaces/IInheritancePlan.sol";
 
 contract InheriChainFactory {
+    VerifierRegistry public registry;
+
     address[] public allPlans;
     mapping(address => address[]) public ownerPlans;
     mapping(address => address[]) public heirPlans;
@@ -13,25 +16,35 @@ contract InheriChainFactory {
     event PlanCreated(address indexed plan, address indexed owner, string planName);
     event HeirRegistered(address indexed plan, address indexed heir);
 
+    constructor() {
+        registry = new VerifierRegistry(address(this));
+    }
+
     function createPlan(
         string calldata _planName,
-        address[3] calldata _verifiers,
-        uint256 _inactivityPeriod
+        address[] calldata _verifiers,
+        uint256 _inactivityPeriod,
+        IInheritancePlan.PlanConfig calldata _config
     ) external returns (address) {
         InheritancePlan plan = new InheritancePlan(
             msg.sender,
             _planName,
             _verifiers,
-            _inactivityPeriod
+            _inactivityPeriod,
+            _config,
+            address(registry)
         );
 
         address planAddr = address(plan);
         allPlans.push(planAddr);
         ownerPlans[msg.sender].push(planAddr);
 
-        for (uint256 i = 0; i < 3; i++) {
+        for (uint256 i = 0; i < _verifiers.length; i++) {
             verifierPlans[_verifiers[i]].push(planAddr);
         }
+
+        // Authorize this plan in the registry
+        registry.authorizePlan(planAddr);
 
         emit PlanCreated(planAddr, msg.sender, _planName);
         return planAddr;
@@ -46,6 +59,10 @@ contract InheriChainFactory {
 
         heirPlans[_heir].push(_plan);
         emit HeirRegistered(_plan, _heir);
+    }
+
+    function getRegistry() external view returns (address) {
+        return address(registry);
     }
 
     function getOwnerPlans(address _owner) external view returns (address[] memory) {

@@ -7,7 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { Link } from "react-router";
 import toast from "react-hot-toast";
-import type { PlanDetails } from "../types";
+import type { PlanDetails, PlanConfig } from "../types";
 import { useState, useEffect } from "react";
 import planAbi from "../abi/InheritancePlan.json";
 import { readContract } from "@wagmi/core";
@@ -34,12 +34,12 @@ export function OwnerDashboard() {
             address: addr,
             abi: planAbi,
             functionName: "getPlanDetails",
-          }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+          }) as [string, string, string[], bigint, bigint, bigint, bigint, bigint, bigint, boolean, PlanConfig, boolean, boolean];
           results.push({
             address: addr,
             owner: data[0] as `0x${string}`,
             planName: data[1],
-            verifiers: data[2] as [`0x${string}`, `0x${string}`, `0x${string}`],
+            verifiers: data[2] as `0x${string}`[],
             inactivityPeriod: data[3],
             lastCheckIn: data[4],
             balance: data[5],
@@ -47,6 +47,17 @@ export function OwnerDashboard() {
             claimCount: data[7],
             totalShareAllocated: data[8],
             isInactive: data[9],
+            config: {
+              requiredApprovals: data[10].requiredApprovals,
+              totalVerifiers: data[10].totalVerifiers,
+              verifierBond: data[10].verifierBond,
+              challengePeriod: data[10].challengePeriod,
+              challengeStake: data[10].challengeStake,
+              gracePeriod: data[10].gracePeriod,
+              recoveryAddress: data[10].recoveryAddress as `0x${string}`,
+            },
+            gracePeriodActive: data[11],
+            recoveryExtensionUsed: data[12],
           });
         } catch {
           // skip failed reads

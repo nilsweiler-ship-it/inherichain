@@ -2,6 +2,7 @@ import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 
 import { useState } from "react";
 import factoryAbi from "../abi/InheriChainFactory.json";
 import { FACTORY_ADDRESS } from "../utils/constants";
+import type { PlanConfig } from "../types";
 
 export function useFactory() {
   const { writeContractAsync } = useWriteContract();
@@ -11,22 +12,22 @@ export function useFactory() {
 
   async function createPlan(
     planName: string,
-    verifiers: [`0x${string}`, `0x${string}`, `0x${string}`],
-    inactivityPeriod: bigint
+    verifiers: `0x${string}`[],
+    inactivityPeriod: bigint,
+    config: PlanConfig
   ): Promise<`0x${string}` | null> {
     const hash = await writeContractAsync({
       address: FACTORY_ADDRESS,
       abi: factoryAbi,
       functionName: "createPlan",
-      args: [planName, verifiers, inactivityPeriod],
+      args: [planName, verifiers, inactivityPeriod, config],
     });
     setTxHash(hash);
 
     const { waitForTransactionReceipt } = await import("@wagmi/core");
-    const { config } = await import("../config/wagmi");
-    const receipt = await waitForTransactionReceipt(config, { hash });
+    const { config: wagmiConfig } = await import("../config/wagmi");
+    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash });
 
-    // Parse PlanCreated event to get plan address
     const iface = await import("viem");
     const log = receipt.logs.find((l) => {
       try {
@@ -82,5 +83,13 @@ export function useVerifierPlans(verifier: `0x${string}` | undefined) {
     functionName: "getVerifierPlans",
     args: verifier ? [verifier] : undefined,
     query: { enabled: !!verifier },
+  });
+}
+
+export function useRegistryAddress() {
+  return useReadContract({
+    address: FACTORY_ADDRESS,
+    abi: factoryAbi,
+    functionName: "getRegistry",
   });
 }

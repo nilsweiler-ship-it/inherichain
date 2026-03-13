@@ -6,6 +6,9 @@ const VARIANT_MAP: Record<ClaimStatus, "default" | "success" | "warning" | "dang
   [ClaimStatus.Pending]: "warning",
   [ClaimStatus.Approved]: "success",
   [ClaimStatus.Rejected]: "danger",
+  [ClaimStatus.Challenged]: "warning",
+  [ClaimStatus.ChallengeFailed]: "danger",
+  [ClaimStatus.Distributing]: "info",
   [ClaimStatus.Distributed]: "info",
 };
 

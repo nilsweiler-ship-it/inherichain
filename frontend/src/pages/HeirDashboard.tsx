@@ -1,6 +1,7 @@
 import { useAccount } from "wagmi";
 import { useHeirPlans } from "../hooks/useFactory";
 import { useClaims } from "../hooks/useClaims";
+import { useInheritancePlan } from "../hooks/useInheritancePlan";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
@@ -11,8 +12,8 @@ import { useState, useEffect } from "react";
 import { readContract } from "@wagmi/core";
 import { config } from "../config/wagmi";
 import planAbi from "../abi/InheritancePlan.json";
-import type { PlanDetails, Claim } from "../types";
-import { formatEth, formatBasisPoints, shortenAddress } from "../utils/formatters";
+import type { PlanDetails, PlanConfig, Claim } from "../types";
+import { formatEth, formatBasisPoints } from "../utils/formatters";
 import { CONDITION_LABELS } from "../types";
 import toast from "react-hot-toast";
 
@@ -21,12 +22,14 @@ interface HeirPlanInfo {
   heirShare: bigint;
   heirCondition: number;
   claims: { claim: Claim; id: number }[];
+  accepted: boolean;
 }
 
 export function HeirDashboard() {
   const { address, isConnected } = useAccount();
   const { data: planAddresses, isLoading } = useHeirPlans(address);
-  const { submitClaim, distribute, loading } = useClaims();
+  const { submitClaim, distributePhase, finalizeApproval, loading } = useClaims();
+  const { acceptInheritance } = useInheritancePlan();
   const [heirPlans, setHeirPlans] = useState<HeirPlanInfo[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [cidMap, setCidMap] = useState<Record<string, string>>({});
@@ -45,13 +48,13 @@ export function HeirDashboard() {
             address: addr,
             abi: planAbi,
             functionName: "getPlanDetails",
-          }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+          }) as [string, string, string[], bigint, bigint, bigint, bigint, bigint, bigint, boolean, PlanConfig, boolean, boolean];
 
           const plan: PlanDetails = {
             address: addr,
             owner: data[0] as `0x${string}`,
             planName: data[1],
-            verifiers: data[2] as [`0x${string}`, `0x${string}`, `0x${string}`],
+            verifiers: data[2] as `0x${string}`[],
             inactivityPeriod: data[3],
             lastCheckIn: data[4],
             balance: data[5],
@@ -59,6 +62,20 @@ export function HeirDashboard() {
             claimCount: data[7],
             totalShareAllocated: data[8],
             isInactive: data[9],
+            config: {
+              requiredApprovals: data[10].requiredApprovals,
+              totalVerifiers: data[10].totalVerifiers,
+              verifierBond: data[10].verifierBond,
+              challengePeriod: data[10].challengePeriod,
+              challengeStake: data[10].challengeStake,
+              gracePeriod: data[10].gracePeriod,
+              recoveryAddress: data[10].recoveryAddress as `0x${string}`,
+              phase2Delay: (data[10] as PlanConfig).phase2Delay ?? 0n,
+              phase3Delay: (data[10] as PlanConfig).phase3Delay ?? 0n,
+              autoRelease: (data[10] as PlanConfig).autoRelease ?? false,
+            },
+            gracePeriodActive: data[11],
+            recoveryExtensionUsed: data[12],
           };
 
           const heirs = await readContract(config, {
@@ -70,6 +87,13 @@ export function HeirDashboard() {
           const myHeir = heirs.find(
             (h) => h.wallet.toLowerCase() === address.toLowerCase()
           );
+
+          const accepted = await readContract(config, {
+            address: addr,
+            abi: planAbi,
+            functionName: "heirAccepted",
+            args: [address],
+          }) as boolean;
 
           const claims: { claim: Claim; id: number }[] = [];
           const claimCount = Number(data[7]);
@@ -90,6 +114,7 @@ export function HeirDashboard() {
             heirShare: myHeir?.sharePercentage ?? 0n,
             heirCondition: myHeir?.condition ?? 0,
             claims,
+            accepted,
           });
         } catch {
           // skip
@@ -116,16 +141,6 @@ export function HeirDashboard() {
     }
   }
 
-  async function handleDistribute(planAddress: `0x${string}`, claimId: number) {
-    try {
-      await distribute(planAddress, claimId);
-      toast.success("Funds claimed!");
-      window.location.reload();
-    } catch {
-      toast.error("Distribution failed");
-    }
-  }
-
   if (!isConnected) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -148,14 +163,42 @@ export function HeirDashboard() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {heirPlans.map(({ plan, heirShare, heirCondition, claims }) => (
+          {heirPlans.map(({ plan, heirShare, heirCondition, claims, accepted }) => (
             <Card key={plan.address} className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gold">{plan.planName}</h2>
-                <Badge variant={plan.isInactive ? "danger" : "success"}>
-                  {plan.isInactive ? "Owner Inactive" : "Owner Active"}
-                </Badge>
+                <div className="flex gap-2">
+                  <Badge variant={accepted ? "success" : "warning"}>
+                    {accepted ? "Accepted" : "Pending Acceptance"}
+                  </Badge>
+                  <Badge variant={plan.isInactive ? "danger" : "success"}>
+                    {plan.isInactive ? "Owner Inactive" : "Owner Active"}
+                  </Badge>
+                </div>
               </div>
+
+              {/* Heir acceptance */}
+              {!accepted && (
+                <div className="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-4 space-y-2">
+                  <p className="text-yellow-400 text-sm">
+                    You have been invited as an heir to this plan. Accept to be eligible for claims.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await acceptInheritance(plan.address);
+                        toast.success("Inheritance accepted!");
+                        window.location.reload();
+                      } catch {
+                        toast.error("Failed to accept inheritance");
+                      }
+                    }}
+                  >
+                    Accept Inheritance
+                  </Button>
+                </div>
+              )}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <p className="text-gray-500">Plan Balance</p>
@@ -170,12 +213,12 @@ export function HeirDashboard() {
                   <p className="font-bold">{CONDITION_LABELS[heirCondition as keyof typeof CONDITION_LABELS]}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Owner</p>
-                  <p className="font-bold font-mono">{shortenAddress(plan.owner)}</p>
+                  <p className="text-gray-500">Verification</p>
+                  <p className="font-bold">{Number(plan.config.requiredApprovals)}-of-{Number(plan.config.totalVerifiers)}</p>
                 </div>
               </div>
 
-              {/* Existing claims */}
+              {/* Existing claims with phase tracker */}
               {claims.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-bold text-gray-400">Your Claims</h3>
@@ -185,15 +228,24 @@ export function HeirDashboard() {
                       claim={claim}
                       claimId={id}
                       isClaimant={true}
-                      onDistribute={() => handleDistribute(plan.address, id)}
-                      distributing={loading}
+                      onDistributePhase={(cid, phase) => {
+                        distributePhase(plan.address, cid, phase)
+                          .then(() => { toast.success("Phase claimed!"); window.location.reload(); })
+                          .catch(() => toast.error("Distribution failed"));
+                      }}
+                      onFinalizeApproval={(cid) => {
+                        finalizeApproval(plan.address, cid)
+                          .then(() => { toast.success("Finalized!"); window.location.reload(); })
+                          .catch(() => toast.error("Finalization failed"));
+                      }}
+                      loading={loading}
                     />
                   ))}
                 </div>
               )}
 
-              {/* Submit new claim if inactive */}
-              {plan.isInactive && (
+              {/* Submit new claim if inactive and accepted */}
+              {plan.isInactive && accepted && (
                 <div className="border-t border-gray-700 pt-4 space-y-3">
                   <h3 className="text-sm font-bold text-gray-400">Submit New Claim</h3>
                   <DocumentUpload onUpload={(cid) => setCidMap((m) => ({ ...m, [plan.address]: cid }))} />

@@ -11,6 +11,8 @@ interface VerificationCardProps {
   claimId: number;
   planAddress: string;
   planName: string;
+  requiredApprovals: number;
+  totalVerifiers: number;
   onVote: (planAddress: string, claimId: number, approve: boolean) => void;
   loading?: boolean;
   hasVoted?: boolean;
@@ -21,6 +23,8 @@ export function VerificationCard({
   claimId,
   planAddress,
   planName,
+  requiredApprovals,
+  totalVerifiers,
   onVote,
   loading,
   hasVoted,
@@ -39,7 +43,8 @@ export function VerificationCard({
           Claim #{claimId} by <span className="font-mono text-white">{shortenAddress(claim.heir)}</span>
         </p>
         <p className="text-gray-400">
-          Votes: {Number(claim.approvals)} / 2 approvals, {Number(claim.rejections)} rejections
+          Votes: {Number(claim.approvals)} / {requiredApprovals} approvals, {Number(claim.rejections)} rejections ({totalVerifiers} total verifiers)
+          {Number(claim.voteRound) > 0 && ` — Round ${Number(claim.voteRound)}`}
         </p>
         {claim.documentCID && (
           <a

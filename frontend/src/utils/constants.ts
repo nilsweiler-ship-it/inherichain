@@ -1,4 +1,13 @@
 export const FACTORY_ADDRESS = (import.meta.env.VITE_FACTORY_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3") as `0x${string}`;
+export const FALLBACK_POOL_ADDRESS = (import.meta.env.VITE_FALLBACK_POOL_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 export const BASIS_POINTS = 10000;
 export const MIN_INACTIVITY_DAYS = 30;
+export const MIN_CHALLENGE_PERIOD_DAYS = 1;
+export const DEFAULT_VERIFIER_BOND = "1"; // ETH
+export const DEFAULT_CHALLENGE_STAKE = "0.5"; // ETH
+export const DEFAULT_CHALLENGE_PERIOD_DAYS = 1;
+export const DEFAULT_GRACE_PERIOD_DAYS = 7;
+export const PHASE2_DELAY_DAYS = 14;
+export const PHASE3_DELAY_DAYS = 30;
+export const MIN_FALLBACK_STAKE = "0.1"; // ETH

@@ -1,6 +1,6 @@
 import { useParams } from "react-router";
 import { useAccount } from "wagmi";
-import { usePlanDetails, usePlanHeirs, useTimeUntilInactive } from "../hooks/useInheritancePlan";
+import { usePlanDetails, usePlanHeirs, useTimeUntilInactive, useInheritancePlan } from "../hooks/useInheritancePlan";
 import { useCheckIn } from "../hooks/useCheckIn";
 import { useClaims, useClaimCount } from "../hooks/useClaims";
 import { useVerification } from "../hooks/useVerification";
@@ -28,8 +28,9 @@ export function PlanDetailPage() {
   const { heirs } = usePlanHeirs(planAddress);
   const { data: timeLeft } = useTimeUntilInactive(planAddress);
   const { checkIn, loading: checkInLoading } = useCheckIn();
-  const { submitClaim, distribute, loading: claimLoading } = useClaims();
-  const { vote, loading: voteLoading } = useVerification();
+  const { submitClaim, distributePhase, finalizeApproval, cancelClaimAsOwner, loading: claimLoading } = useClaims();
+  const { vote, stakeAsVerifier, raiseChallenge, withdrawVerifierBond, loading: voteLoading } = useVerification();
+  const { revokePlan, removeHeir } = useInheritancePlan();
   const { data: claimCount } = useClaimCount(planAddress);
   const [claims, setClaims] = useState<{ claim: Claim; id: number }[]>([]);
   const [docCid, setDocCid] = useState("");
@@ -76,6 +77,8 @@ export function PlanDetailPage() {
     );
   }
 
+  const cfg = planDetails.config;
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -88,7 +91,16 @@ export function PlanDetailPage() {
         </Badge>
       </div>
 
-      {/* Plan details */}
+      {/* Grace period banner */}
+      {planDetails.gracePeriodActive && (
+        <Card className="bg-yellow-900/20 border-yellow-600/30">
+          <p className="text-yellow-400 text-sm">
+            Grace period is active. The inactivity deadline has been extended by {Number(cfg.gracePeriod) / 86400} days.
+          </p>
+        </Card>
+      )}
+
+      {/* Plan overview */}
       <Card className="space-y-4">
         <h2 className="text-lg font-bold text-gold">Plan Overview</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
@@ -109,8 +121,32 @@ export function PlanDetailPage() {
             <p className="font-bold">{formatBasisPoints(planDetails.totalShareAllocated)}</p>
           </div>
           <div>
-            <p className="text-gray-500">Heirs</p>
-            <p className="font-bold">{Number(planDetails.heirCount)}</p>
+            <p className="text-gray-500">Verification</p>
+            <p className="font-bold">{Number(cfg.requiredApprovals)}-of-{Number(cfg.totalVerifiers)}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Challenge Period</p>
+            <p className="font-bold">{Number(cfg.challengePeriod) / 86400}d</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Verifier Bond</p>
+            <p className="font-bold">{formatEth(cfg.verifierBond)}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Challenge Stake</p>
+            <p className="font-bold">{formatEth(cfg.challengeStake)}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Phase 2 Delay</p>
+            <p className="font-bold">{Number(cfg.phase2Delay) / 86400}d</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Phase 3 Delay</p>
+            <p className="font-bold">{Number(cfg.phase3Delay) / 86400}d</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Auto-Release</p>
+            <p className="font-bold">{cfg.autoRelease ? "Yes" : "No"}</p>
           </div>
           <div>
             <p className="text-gray-500">Claims</p>
@@ -133,19 +169,76 @@ export function PlanDetailPage() {
       {isOwner && !planDetails.isInactive && (
         <Card className="space-y-3">
           <h2 className="text-lg font-bold text-gold">Owner Actions</h2>
-          <Button
-            onClick={async () => {
-              try {
-                await checkIn(planAddress);
-                toast.success("Checked in!");
-              } catch {
-                toast.error("Check-in failed");
-              }
-            }}
-            loading={checkInLoading}
-          >
-            Check In
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              onClick={async () => {
+                try {
+                  await checkIn(planAddress);
+                  toast.success("Checked in!");
+                } catch {
+                  toast.error("Check-in failed");
+                }
+              }}
+              loading={checkInLoading}
+            >
+              Check In
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                if (!confirm("Are you sure you want to revoke this plan? This will cancel all pending claims and return remaining funds.")) return;
+                try {
+                  await revokePlan(planAddress);
+                  toast.success("Plan revoked!");
+                  window.location.reload();
+                } catch {
+                  toast.error("Revoke failed");
+                }
+              }}
+            >
+              Revoke Plan
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Verifier staking panel */}
+      {isVerifier && (
+        <Card className="space-y-3">
+          <h2 className="text-lg font-bold text-gold">Verifier Panel</h2>
+          <div className="flex gap-3">
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  await stakeAsVerifier(planAddress, cfg.verifierBond);
+                  toast.success("Staked!");
+                  window.location.reload();
+                } catch {
+                  toast.error("Staking failed");
+                }
+              }}
+              loading={voteLoading}
+            >
+              Stake Bond ({formatEth(cfg.verifierBond)})
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  await withdrawVerifierBond(planAddress);
+                  toast.success("Bond withdrawn!");
+                  window.location.reload();
+                } catch {
+                  toast.error("Withdrawal failed");
+                }
+              }}
+              loading={voteLoading}
+            >
+              Withdraw Bond
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -165,7 +258,27 @@ export function PlanDetailPage() {
                     {heir.condition === 4 && ` (age ${Number(heir.ageThreshold)})`}
                   </p>
                 </div>
-                <span className="text-gold font-bold">{formatBasisPoints(heir.sharePercentage)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-gold font-bold">{formatBasisPoints(heir.sharePercentage)}</span>
+                  {isOwner && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={async () => {
+                        if (!confirm(`Remove heir ${shortenAddress(heir.wallet)}?`)) return;
+                        try {
+                          await removeHeir(planAddress, heir.wallet);
+                          toast.success("Heir removed!");
+                          window.location.reload();
+                        } catch {
+                          toast.error("Failed to remove heir");
+                        }
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -185,12 +298,28 @@ export function PlanDetailPage() {
                   claim={claim}
                   claimId={id}
                   isClaimant={userAddress?.toLowerCase() === claim.heir.toLowerCase()}
-                  onDistribute={(cid) => {
-                    distribute(planAddress, cid)
-                      .then(() => { toast.success("Distributed!"); window.location.reload(); })
+                  isOwner={!!isOwner}
+                  onDistributePhase={(cid, phase) => {
+                    distributePhase(planAddress, cid, phase)
+                      .then(() => { toast.success("Phase claimed!"); window.location.reload(); })
                       .catch(() => toast.error("Distribution failed"));
                   }}
-                  distributing={claimLoading}
+                  onFinalizeApproval={(cid) => {
+                    finalizeApproval(planAddress, cid)
+                      .then(() => { toast.success("Finalized!"); window.location.reload(); })
+                      .catch(() => toast.error("Finalization failed"));
+                  }}
+                  onCancelClaim={(cid) => {
+                    cancelClaimAsOwner(planAddress, cid)
+                      .then(() => { toast.success("Cancelled!"); window.location.reload(); })
+                      .catch(() => toast.error("Cancel failed"));
+                  }}
+                  onRaiseChallenge={(cid) => {
+                    raiseChallenge(planAddress, cid, cfg.challengeStake)
+                      .then(() => { toast.success("Challenge raised!"); window.location.reload(); })
+                      .catch(() => toast.error("Challenge failed"));
+                  }}
+                  loading={claimLoading || voteLoading}
                 />
                 {isVerifier && claim.status === 1 && (
                   <ApproveRejectButtons

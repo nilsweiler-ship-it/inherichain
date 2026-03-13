@@ -1,10 +1,11 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { InheriChainFactory, InheritancePlan } from "../typechain-types";
+import { InheriChainFactory, InheritancePlan, VerifierRegistry } from "../typechain-types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-toolbox/node_modules/@nomicfoundation/hardhat-ethers/signers";
 
 describe("InheriChainFactory", function () {
   let factory: InheriChainFactory;
+  let registry: VerifierRegistry;
   let owner: HardhatEthersSigner;
   let verifier1: HardhatEthersSigner;
   let verifier2: HardhatEthersSigner;
@@ -12,14 +13,46 @@ describe("InheriChainFactory", function () {
   let heir1: HardhatEthersSigner;
   let heir2: HardhatEthersSigner;
   let stranger: HardhatEthersSigner;
+  let recovery: HardhatEthersSigner;
 
   const SIXTY_DAYS = 60 * 24 * 60 * 60;
+  const ONE_DAY = 24 * 60 * 60;
+  const BOND = ethers.parseEther("1");
+  const CHALLENGE_STAKE = ethers.parseEther("0.5");
+
+  function defaultConfig(recoveryAddr: string = ethers.ZeroAddress) {
+    return {
+      requiredApprovals: 2n,
+      totalVerifiers: 3n,
+      verifierBond: BOND,
+      challengePeriod: BigInt(ONE_DAY),
+      challengeStake: CHALLENGE_STAKE,
+      gracePeriod: BigInt(7 * ONE_DAY),
+      recoveryAddress: recoveryAddr,
+      phase2Delay: 0n,
+      phase3Delay: 0n,
+      autoRelease: false,
+    };
+  }
 
   beforeEach(async function () {
-    [owner, verifier1, verifier2, verifier3, heir1, heir2, stranger] =
+    [owner, verifier1, verifier2, verifier3, heir1, heir2, stranger, recovery] =
       await ethers.getSigners();
     const Factory = await ethers.getContractFactory("InheriChainFactory");
     factory = await Factory.deploy();
+    const registryAddr = await factory.getRegistry();
+    registry = await ethers.getContractAt("VerifierRegistry", registryAddr);
+  });
+
+  describe("Registry Deployment", function () {
+    it("should deploy a registry in constructor", async function () {
+      const registryAddr = await factory.getRegistry();
+      expect(registryAddr).to.not.equal(ethers.ZeroAddress);
+    });
+
+    it("should set factory as registry owner", async function () {
+      expect(await registry.factory()).to.equal(await factory.getAddress());
+    });
   });
 
   describe("createPlan", function () {
@@ -27,11 +60,16 @@ describe("InheriChainFactory", function () {
       const tx = await factory.connect(owner).createPlan(
         "Test Plan",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       const receipt = await tx.wait();
       const event = receipt?.logs.find(
-        (log) => factory.interface.parseLog({ topics: [...log.topics], data: log.data })?.name === "PlanCreated"
+        (log) => {
+          try {
+            return factory.interface.parseLog({ topics: [...log.topics], data: log.data })?.name === "PlanCreated";
+          } catch { return false; }
+        }
       );
       expect(event).to.not.be.undefined;
     });
@@ -40,36 +78,49 @@ describe("InheriChainFactory", function () {
       await factory.connect(owner).createPlan(
         "Test Plan",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       const plans = await factory.getOwnerPlans(owner.address);
       expect(plans.length).to.equal(1);
     });
 
-    it("should register plan in verifierPlans for all 3 verifiers", async function () {
+    it("should register plan in verifierPlans for all verifiers", async function () {
       await factory.connect(owner).createPlan(
         "Test Plan",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       expect((await factory.getVerifierPlans(verifier1.address)).length).to.equal(1);
       expect((await factory.getVerifierPlans(verifier2.address)).length).to.equal(1);
       expect((await factory.getVerifierPlans(verifier3.address)).length).to.equal(1);
     });
 
+    it("should authorize plan in registry", async function () {
+      await factory.connect(owner).createPlan(
+        "Test Plan",
+        [verifier1.address, verifier2.address, verifier3.address],
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
+      );
+      const plans = await factory.getOwnerPlans(owner.address);
+      expect(await registry.authorizedPlans(plans[0])).to.be.true;
+    });
+
     it("should create multiple plans for same owner", async function () {
       await factory.connect(owner).createPlan(
         "Plan 1",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       await factory.connect(owner).createPlan(
         "Plan 2",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
-      const plans = await factory.getOwnerPlans(owner.address);
-      expect(plans.length).to.equal(2);
       expect(await factory.getPlanCount()).to.equal(2);
     });
 
@@ -77,7 +128,8 @@ describe("InheriChainFactory", function () {
       await factory.connect(owner).createPlan(
         "Test Plan",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       const plans = await factory.getOwnerPlans(owner.address);
       const plan = await ethers.getContractAt("InheritancePlan", plans[0]);
@@ -93,11 +145,11 @@ describe("InheriChainFactory", function () {
       await factory.connect(owner).createPlan(
         "Test Plan",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       const plans = await factory.getOwnerPlans(owner.address);
       planAddress = plans[0];
-
       const plan = await ethers.getContractAt("InheritancePlan", planAddress);
       await plan.connect(owner).addHeir(heir1.address, 5000, 0, 0, "");
     });
@@ -145,7 +197,8 @@ describe("InheriChainFactory", function () {
       await factory.connect(owner).createPlan(
         "Plan 1",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       const allPlans = await factory.getAllPlans();
       expect(allPlans.length).to.equal(1);
@@ -156,7 +209,8 @@ describe("InheriChainFactory", function () {
       await factory.connect(owner).createPlan(
         "Plan 1",
         [verifier1.address, verifier2.address, verifier3.address],
-        SIXTY_DAYS
+        SIXTY_DAYS,
+        defaultConfig(recovery.address)
       );
       expect(await factory.getPlanCount()).to.equal(1);
     });

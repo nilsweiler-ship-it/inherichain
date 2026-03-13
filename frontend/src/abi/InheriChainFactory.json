@@ -1,5 +1,10 @@
 [
   {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -70,14 +75,71 @@
         "type": "string"
       },
       {
-        "internalType": "address[3]",
+        "internalType": "address[]",
         "name": "_verifiers",
-        "type": "address[3]"
+        "type": "address[]"
       },
       {
         "internalType": "uint256",
         "name": "_inactivityPeriod",
         "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "requiredApprovals",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalVerifiers",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "verifierBond",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "challengePeriod",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "challengeStake",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "gracePeriod",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "recoveryAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "phase2Delay",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "phase3Delay",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "autoRelease",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct IInheritancePlan.PlanConfig",
+        "name": "_config",
+        "type": "tuple"
       }
     ],
     "name": "createPlan",
@@ -150,6 +212,19 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -238,6 +313,19 @@
     "name": "registerHeir",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "registry",
+    "outputs": [
+      {
+        "internalType": "contract VerifierRegistry",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

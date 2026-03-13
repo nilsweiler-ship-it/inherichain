@@ -12,7 +12,29 @@ export enum ClaimStatus {
   Pending = 1,
   Approved = 2,
   Rejected = 3,
-  Distributed = 4,
+  Challenged = 4,
+  ChallengeFailed = 5,
+  Distributing = 6,
+  Distributed = 7,
+}
+
+export enum DistributionPhase {
+  Phase1 = 0,
+  Phase2 = 1,
+  Phase3 = 2,
+}
+
+export interface PlanConfig {
+  requiredApprovals: bigint;
+  totalVerifiers: bigint;
+  verifierBond: bigint;
+  challengePeriod: bigint;
+  challengeStake: bigint;
+  gracePeriod: bigint;
+  recoveryAddress: `0x${string}`;
+  phase2Delay: bigint;
+  phase3Delay: bigint;
+  autoRelease: boolean;
 }
 
 export interface Heir {
@@ -30,13 +52,38 @@ export interface Claim {
   approvals: bigint;
   rejections: bigint;
   submittedAt: bigint;
+  approvedAt: bigint;
+  challengeDeadline: bigint;
+  voteRound: bigint;
+  phase1Claimed: boolean;
+  phase2Claimed: boolean;
+  phase3Claimed: boolean;
+  snapshotBalance: bigint;
+  snapshotDistributedShare: bigint;
+}
+
+export interface Challenge {
+  challenger: `0x${string}`;
+  stake: bigint;
+  claimId: bigint;
+  raisedAt: bigint;
+  resolved: boolean;
+  successful: boolean;
+}
+
+export interface VerifierStats {
+  plansVerified: bigint;
+  votesCast: bigint;
+  challengesReceived: bigint;
+  challengesLost: bigint;
+  bondsSlashed: bigint;
 }
 
 export interface PlanDetails {
   address: `0x${string}`;
   owner: `0x${string}`;
   planName: string;
-  verifiers: [`0x${string}`, `0x${string}`, `0x${string}`];
+  verifiers: `0x${string}`[];
   inactivityPeriod: bigint;
   lastCheckIn: bigint;
   balance: bigint;
@@ -44,6 +91,22 @@ export interface PlanDetails {
   claimCount: bigint;
   totalShareAllocated: bigint;
   isInactive: boolean;
+  config: PlanConfig;
+  gracePeriodActive: boolean;
+  recoveryExtensionUsed: boolean;
+}
+
+export interface OracleResult {
+  completed: boolean;
+  validated: boolean;
+}
+
+export interface FallbackVerifier {
+  verifierAddress: `0x${string}`;
+  stake: bigint;
+  active: boolean;
+  assignedPlans: bigint;
+  registeredAt: bigint;
 }
 
 export interface HeirFormData {
@@ -68,5 +131,8 @@ export const CLAIM_STATUS_LABELS: Record<ClaimStatus, string> = {
   [ClaimStatus.Pending]: "Pending",
   [ClaimStatus.Approved]: "Approved",
   [ClaimStatus.Rejected]: "Rejected",
+  [ClaimStatus.Challenged]: "Challenged",
+  [ClaimStatus.ChallengeFailed]: "Challenge Failed",
+  [ClaimStatus.Distributing]: "Distributing",
   [ClaimStatus.Distributed]: "Distributed",
 };

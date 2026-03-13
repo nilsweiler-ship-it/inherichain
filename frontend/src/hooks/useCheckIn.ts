@@ -23,5 +23,22 @@ export function useCheckIn() {
     }
   }
 
-  return { checkIn, loading };
+  async function extendCheckIn(planAddress: `0x${string}`) {
+    setLoading(true);
+    try {
+      const hash = await writeContractAsync({
+        address: planAddress,
+        abi: planAbi,
+        functionName: "extendCheckIn",
+      });
+      const { waitForTransactionReceipt } = await import("@wagmi/core");
+      const { config } = await import("../config/wagmi");
+      await waitForTransactionReceipt(config, { hash });
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { checkIn, extendCheckIn, loading };
 }

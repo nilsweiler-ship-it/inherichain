@@ -1,7 +1,7 @@
 import { useReadContract, useWriteContract } from "wagmi";
 import { useState } from "react";
 import planAbi from "../abi/InheritancePlan.json";
-import type { Claim } from "../types";
+import type { Claim, OracleResult } from "../types";
 
 export function useClaimInfo(planAddress: `0x${string}` | undefined, claimId: number) {
   const { data, isLoading, refetch } = useReadContract({
@@ -46,13 +46,31 @@ export function useClaims() {
     }
   }
 
-  async function distribute(planAddress: `0x${string}`, claimId: number) {
+  async function distributePhase(planAddress: `0x${string}`, claimId: number, phase: number) {
     setLoading(true);
     try {
       const hash = await writeContractAsync({
         address: planAddress,
         abi: planAbi,
-        functionName: "distribute",
+        functionName: "distributePhase",
+        args: [BigInt(claimId), phase],
+      });
+      const { waitForTransactionReceipt } = await import("@wagmi/core");
+      const { config } = await import("../config/wagmi");
+      await waitForTransactionReceipt(config, { hash });
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function finalizeApproval(planAddress: `0x${string}`, claimId: number) {
+    setLoading(true);
+    try {
+      const hash = await writeContractAsync({
+        address: planAddress,
+        abi: planAbi,
+        functionName: "finalizeApproval",
         args: [BigInt(claimId)],
       });
       const { waitForTransactionReceipt } = await import("@wagmi/core");
@@ -64,5 +82,51 @@ export function useClaims() {
     }
   }
 
-  return { submitClaim, distribute, loading };
+  async function cancelClaimAsOwner(planAddress: `0x${string}`, claimId: number) {
+    setLoading(true);
+    try {
+      const hash = await writeContractAsync({
+        address: planAddress,
+        abi: planAbi,
+        functionName: "cancelClaimAsOwner",
+        args: [BigInt(claimId)],
+      });
+      const { waitForTransactionReceipt } = await import("@wagmi/core");
+      const { config } = await import("../config/wagmi");
+      await waitForTransactionReceipt(config, { hash });
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function triggerFallbackVerification(planAddress: `0x${string}`, claimId: number) {
+    setLoading(true);
+    try {
+      const hash = await writeContractAsync({
+        address: planAddress,
+        abi: planAbi,
+        functionName: "triggerFallbackVerification",
+        args: [BigInt(claimId)],
+      });
+      const { waitForTransactionReceipt } = await import("@wagmi/core");
+      const { config } = await import("../config/wagmi");
+      await waitForTransactionReceipt(config, { hash });
+      return true;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { submitClaim, distributePhase, finalizeApproval, cancelClaimAsOwner, triggerFallbackVerification, loading };
+}
+
+export function useOracleValidated(planAddress: `0x${string}` | undefined, claimId: number) {
+  return useReadContract({
+    address: planAddress,
+    abi: planAbi,
+    functionName: "claimOracleValidated",
+    args: [BigInt(claimId)],
+    query: { enabled: !!planAddress },
+  });
 }
