@@ -8,7 +8,7 @@ import { Spinner } from "../components/ui/Spinner";
 import { Link } from "react-router";
 import toast from "react-hot-toast";
 import type { PlanDetails } from "../types";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import planAbi from "../abi/InheritancePlan.json";
 import { readContract } from "@wagmi/core";
 import { config } from "../config/wagmi";
@@ -19,50 +19,55 @@ export function OwnerDashboard() {
   const { checkIn, loading: checkInLoading } = useCheckIn();
   const [plans, setPlans] = useState<PlanDetails[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
+  const [fetchVersion, setFetchVersion] = useState(0);
+
+  const fetchPlans = useCallback(async () => {
+    if (!planAddresses || (planAddresses as `0x${string}`[]).length === 0) {
+      setPlans([]);
+      return;
+    }
+    setLoadingPlans(true);
+    const results: PlanDetails[] = [];
+    for (const addr of planAddresses as `0x${string}`[]) {
+      try {
+        const data = await readContract(config, {
+          address: addr,
+          abi: planAbi,
+          functionName: "getPlanDetails",
+        }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+        results.push({
+          address: addr,
+          owner: data[0] as `0x${string}`,
+          planName: data[1],
+          verifiers: data[2] as [`0x${string}`, `0x${string}`, `0x${string}`],
+          inactivityPeriod: data[3],
+          lastCheckIn: data[4],
+          balance: data[5],
+          heirCount: data[6],
+          claimCount: data[7],
+          totalShareAllocated: data[8],
+          isInactive: data[9],
+        });
+      } catch (err) {
+        console.error(`Failed to fetch plan ${addr}:`, err);
+        toast.error("Failed to load a plan");
+      }
+    }
+    setPlans(results);
+    setLoadingPlans(false);
+  }, [planAddresses]);
 
   useEffect(() => {
-    async function fetchPlans() {
-      if (!planAddresses || (planAddresses as `0x${string}`[]).length === 0) {
-        setPlans([]);
-        return;
-      }
-      setLoadingPlans(true);
-      const results: PlanDetails[] = [];
-      for (const addr of planAddresses as `0x${string}`[]) {
-        try {
-          const data = await readContract(config, {
-            address: addr,
-            abi: planAbi,
-            functionName: "getPlanDetails",
-          }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
-          results.push({
-            address: addr,
-            owner: data[0] as `0x${string}`,
-            planName: data[1],
-            verifiers: data[2] as [`0x${string}`, `0x${string}`, `0x${string}`],
-            inactivityPeriod: data[3],
-            lastCheckIn: data[4],
-            balance: data[5],
-            heirCount: data[6],
-            claimCount: data[7],
-            totalShareAllocated: data[8],
-            isInactive: data[9],
-          });
-        } catch {
-          // skip failed reads
-        }
-      }
-      setPlans(results);
-      setLoadingPlans(false);
-    }
     fetchPlans();
-  }, [planAddresses]);
+  }, [fetchPlans, fetchVersion]);
 
   async function handleCheckIn(planAddress: `0x${string}`) {
     try {
       await checkIn(planAddress);
       toast.success("Checked in successfully!");
-    } catch {
+      setFetchVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Check-in failed:", err);
       toast.error("Check-in failed");
     }
   }

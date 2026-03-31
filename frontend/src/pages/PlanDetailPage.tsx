@@ -18,21 +18,22 @@ import { readContract } from "@wagmi/core";
 import { config } from "../config/wagmi";
 import planAbi from "../abi/InheritancePlan.json";
 import toast from "react-hot-toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export function PlanDetailPage() {
   const { address: planAddr } = useParams<{ address: string }>();
   const planAddress = planAddr as `0x${string}`;
   const { address: userAddress } = useAccount();
-  const { planDetails, isLoading } = usePlanDetails(planAddress);
-  const { heirs } = usePlanHeirs(planAddress);
+  const { planDetails, isLoading, refetch: refetchPlan } = usePlanDetails(planAddress);
+  const { heirs, refetch: refetchHeirs } = usePlanHeirs(planAddress);
   const { data: timeLeft } = useTimeUntilInactive(planAddress);
   const { checkIn, loading: checkInLoading } = useCheckIn();
   const { submitClaim, distribute, loading: claimLoading } = useClaims();
   const { vote, loading: voteLoading } = useVerification();
-  const { data: claimCount } = useClaimCount(planAddress);
+  const { data: claimCount, refetch: refetchClaimCount } = useClaimCount(planAddress);
   const [claims, setClaims] = useState<{ claim: Claim; id: number }[]>([]);
   const [docCid, setDocCid] = useState("");
+  const [claimsVersion, setClaimsVersion] = useState(0);
 
   const isOwner = userAddress && planDetails?.owner?.toLowerCase() === userAddress.toLowerCase();
   const isVerifier = userAddress && planDetails?.verifiers?.some(
@@ -41,6 +42,11 @@ export function PlanDetailPage() {
   const isHeirUser = userAddress && heirs.some(
     (h) => h.wallet.toLowerCase() === userAddress.toLowerCase()
   );
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refetchPlan(), refetchHeirs(), refetchClaimCount()]);
+    setClaimsVersion((v) => v + 1);
+  }, [refetchPlan, refetchHeirs, refetchClaimCount]);
 
   useEffect(() => {
     async function fetchClaims() {
@@ -56,14 +62,14 @@ export function PlanDetailPage() {
             args: [BigInt(i)],
           }) as Claim;
           results.push({ claim, id: i });
-        } catch {
-          // skip
+        } catch (err) {
+          console.error(`Failed to fetch claim ${i}:`, err);
         }
       }
       setClaims(results);
     }
     fetchClaims();
-  }, [claimCount, planAddress]);
+  }, [claimCount, planAddress, claimsVersion]);
 
   if (isLoading) return <Spinner />;
   if (!planDetails) {
@@ -138,7 +144,9 @@ export function PlanDetailPage() {
               try {
                 await checkIn(planAddress);
                 toast.success("Checked in!");
-              } catch {
+                await refreshAll();
+              } catch (err) {
+                console.error("Check-in failed:", err);
                 toast.error("Check-in failed");
               }
             }}
@@ -187,8 +195,8 @@ export function PlanDetailPage() {
                   isClaimant={userAddress?.toLowerCase() === claim.heir.toLowerCase()}
                   onDistribute={() => {
                     distribute(planAddress, id)
-                      .then(() => { toast.success("Distributed!"); window.location.reload(); })
-                      .catch(() => toast.error("Distribution failed"));
+                      .then(() => { toast.success("Distributed!"); refreshAll(); })
+                      .catch((err) => { console.error("Distribution failed:", err); toast.error("Distribution failed"); });
                   }}
                   distributing={claimLoading}
                 />
@@ -196,13 +204,13 @@ export function PlanDetailPage() {
                   <ApproveRejectButtons
                     onApprove={() => {
                       vote(planAddress, id, true)
-                        .then(() => { toast.success("Approved!"); window.location.reload(); })
-                        .catch(() => toast.error("Vote failed"));
+                        .then(() => { toast.success("Approved!"); refreshAll(); })
+                        .catch((err) => { console.error("Vote failed:", err); toast.error("Vote failed"); });
                     }}
                     onReject={() => {
                       vote(planAddress, id, false)
-                        .then(() => { toast.success("Rejected!"); window.location.reload(); })
-                        .catch(() => toast.error("Vote failed"));
+                        .then(() => { toast.success("Rejected!"); refreshAll(); })
+                        .catch((err) => { console.error("Vote failed:", err); toast.error("Vote failed"); });
                     }}
                     loading={voteLoading}
                   />
@@ -224,8 +232,10 @@ export function PlanDetailPage() {
               try {
                 await submitClaim(planAddress, docCid);
                 toast.success("Claim submitted!");
-                window.location.reload();
-              } catch {
+                setDocCid("");
+                await refreshAll();
+              } catch (err) {
+                console.error("Claim submission failed:", err);
                 toast.error("Claim failed");
               }
             }}

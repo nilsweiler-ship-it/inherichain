@@ -18,6 +18,7 @@ contract InheritancePlan is IInheritancePlan, ReentrancyGuard {
 
     Claim[] public claims;
     mapping(uint256 => mapping(address => bool)) public verifierVoted;
+    mapping(address => bool) public hasActiveClaim;
     uint256 public distributedShare; // tracks total basis points already distributed
 
     uint256 public constant REQUIRED_APPROVALS = 2;
@@ -146,8 +147,10 @@ contract InheritancePlan is IInheritancePlan, ReentrancyGuard {
     }
 
     function submitClaim(string calldata _documentCID) external onlyHeir ownerInactive {
+        require(!hasActiveClaim[msg.sender], "Active claim exists");
         uint256 claimId = claims.length;
         uint256 share = heirs[heirIndex[msg.sender]].sharePercentage;
+        hasActiveClaim[msg.sender] = true;
         claims.push(Claim({
             heir: msg.sender,
             documentCID: _documentCID,
@@ -183,6 +186,7 @@ contract InheritancePlan is IInheritancePlan, ReentrancyGuard {
 
             if (claim.rejections >= REQUIRED_APPROVALS) {
                 claim.status = ClaimStatus.Rejected;
+                hasActiveClaim[claim.heir] = false;
                 emit ClaimRejected(_claimId);
             }
         }
@@ -195,6 +199,7 @@ contract InheritancePlan is IInheritancePlan, ReentrancyGuard {
         require(msg.sender == claim.heir, "Not claim heir");
 
         claim.status = ClaimStatus.Distributed;
+        hasActiveClaim[claim.heir] = false;
 
         uint256 heirShare = claim.heirShare;
         require(distributedShare + heirShare <= BASIS_POINTS, "Share overflow");

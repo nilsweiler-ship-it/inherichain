@@ -7,7 +7,7 @@ import { Spinner } from "../components/ui/Spinner";
 import { DocumentUpload } from "../components/claim/DocumentUpload";
 import { ClaimCard } from "../components/claim/ClaimCard";
 import { Badge } from "../components/ui/Badge";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { readContract } from "@wagmi/core";
 import { config } from "../config/wagmi";
 import planAbi from "../abi/InheritancePlan.json";
@@ -30,76 +30,81 @@ export function HeirDashboard() {
   const [heirPlans, setHeirPlans] = useState<HeirPlanInfo[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [cidMap, setCidMap] = useState<Record<string, string>>({});
+  const [fetchVersion, setFetchVersion] = useState(0);
+
+  const fetchPlans = useCallback(async () => {
+    if (!planAddresses || !address || (planAddresses as `0x${string}`[]).length === 0) {
+      setHeirPlans([]);
+      return;
+    }
+    setLoadingPlans(true);
+    const results: HeirPlanInfo[] = [];
+    for (const addr of planAddresses as `0x${string}`[]) {
+      try {
+        const data = await readContract(config, {
+          address: addr,
+          abi: planAbi,
+          functionName: "getPlanDetails",
+        }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+
+        const plan: PlanDetails = {
+          address: addr,
+          owner: data[0] as `0x${string}`,
+          planName: data[1],
+          verifiers: data[2] as [`0x${string}`, `0x${string}`, `0x${string}`],
+          inactivityPeriod: data[3],
+          lastCheckIn: data[4],
+          balance: data[5],
+          heirCount: data[6],
+          claimCount: data[7],
+          totalShareAllocated: data[8],
+          isInactive: data[9],
+        };
+
+        const heirs = await readContract(config, {
+          address: addr,
+          abi: planAbi,
+          functionName: "getAllHeirs",
+        }) as { wallet: string; sharePercentage: bigint; condition: number }[];
+
+        const myHeir = heirs.find(
+          (h) => h.wallet.toLowerCase() === address.toLowerCase()
+        );
+
+        const claims: { claim: Claim; id: number }[] = [];
+        const claimCount = Number(data[7]);
+        for (let i = 0; i < claimCount; i++) {
+          const claim = await readContract(config, {
+            address: addr,
+            abi: planAbi,
+            functionName: "getClaimInfo",
+            args: [BigInt(i)],
+          }) as Claim;
+          if (claim.heir.toLowerCase() === address.toLowerCase()) {
+            claims.push({ claim, id: i });
+          }
+        }
+
+        results.push({
+          plan,
+          heirShare: myHeir?.sharePercentage ?? 0n,
+          heirCondition: myHeir?.condition ?? 0,
+          claims,
+        });
+      } catch (err) {
+        console.error(`Failed to fetch plan ${addr}:`, err);
+        toast.error("Failed to load a plan");
+      }
+    }
+    setHeirPlans(results);
+    setLoadingPlans(false);
+  }, [planAddresses, address]);
 
   useEffect(() => {
-    async function fetchPlans() {
-      if (!planAddresses || !address || (planAddresses as `0x${string}`[]).length === 0) {
-        setHeirPlans([]);
-        return;
-      }
-      setLoadingPlans(true);
-      const results: HeirPlanInfo[] = [];
-      for (const addr of planAddresses as `0x${string}`[]) {
-        try {
-          const data = await readContract(config, {
-            address: addr,
-            abi: planAbi,
-            functionName: "getPlanDetails",
-          }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
-
-          const plan: PlanDetails = {
-            address: addr,
-            owner: data[0] as `0x${string}`,
-            planName: data[1],
-            verifiers: data[2] as [`0x${string}`, `0x${string}`, `0x${string}`],
-            inactivityPeriod: data[3],
-            lastCheckIn: data[4],
-            balance: data[5],
-            heirCount: data[6],
-            claimCount: data[7],
-            totalShareAllocated: data[8],
-            isInactive: data[9],
-          };
-
-          const heirs = await readContract(config, {
-            address: addr,
-            abi: planAbi,
-            functionName: "getAllHeirs",
-          }) as { wallet: string; sharePercentage: bigint; condition: number }[];
-
-          const myHeir = heirs.find(
-            (h) => h.wallet.toLowerCase() === address.toLowerCase()
-          );
-
-          const claims: { claim: Claim; id: number }[] = [];
-          const claimCount = Number(data[7]);
-          for (let i = 0; i < claimCount; i++) {
-            const claim = await readContract(config, {
-              address: addr,
-              abi: planAbi,
-              functionName: "getClaimInfo",
-              args: [BigInt(i)],
-            }) as Claim;
-            if (claim.heir.toLowerCase() === address.toLowerCase()) {
-              claims.push({ claim, id: i });
-            }
-          }
-
-          results.push({
-            plan,
-            heirShare: myHeir?.sharePercentage ?? 0n,
-            heirCondition: myHeir?.condition ?? 0,
-            claims,
-          });
-        } catch {
-          // skip
-        }
-      }
-      setHeirPlans(results);
-      setLoadingPlans(false);
-    }
     fetchPlans();
-  }, [planAddresses, address]);
+  }, [fetchPlans, fetchVersion]);
+
+  const refreshData = () => setFetchVersion((v) => v + 1);
 
   async function handleSubmitClaim(planAddress: `0x${string}`) {
     const cid = cidMap[planAddress];
@@ -110,8 +115,10 @@ export function HeirDashboard() {
     try {
       await submitClaim(planAddress, cid);
       toast.success("Claim submitted!");
-      window.location.reload();
-    } catch {
+      setCidMap((m) => { const next = { ...m }; delete next[planAddress]; return next; });
+      refreshData();
+    } catch (err) {
+      console.error("Claim submission failed:", err);
       toast.error("Failed to submit claim");
     }
   }
@@ -120,8 +127,9 @@ export function HeirDashboard() {
     try {
       await distribute(planAddress, claimId);
       toast.success("Funds claimed!");
-      window.location.reload();
-    } catch {
+      refreshData();
+    } catch (err) {
+      console.error("Distribution failed:", err);
       toast.error("Distribution failed");
     }
   }

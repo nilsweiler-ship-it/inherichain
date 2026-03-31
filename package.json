@@ -5,7 +5,10 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "node": "hardhat node"
+    "node": "hardhat node",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "lint": "cd frontend && npm run lint",
+    "typecheck": "cd frontend && tsc -b --noEmit"
   },
   "keywords": [],
   "author": "",

@@ -4,7 +4,7 @@ import { useVerification } from "../hooks/useVerification";
 import { Card } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
 import { VerificationCard } from "../components/verification/VerificationCard";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { readContract } from "@wagmi/core";
 import { config } from "../config/wagmi";
 import planAbi from "../abi/InheritancePlan.json";
@@ -25,63 +25,67 @@ export function VerifierPanel() {
   const { vote, loading } = useVerification();
   const [pendingClaims, setPendingClaims] = useState<PendingClaim[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(false);
+  const [fetchVersion, setFetchVersion] = useState(0);
 
-  useEffect(() => {
-    async function fetchClaims() {
-      if (!planAddresses || !address || (planAddresses as `0x${string}`[]).length === 0) {
-        setPendingClaims([]);
-        return;
-      }
-      setLoadingClaims(true);
-      const results: PendingClaim[] = [];
-      for (const addr of planAddresses as `0x${string}`[]) {
-        try {
-          const details = await readContract(config, {
+  const fetchClaims = useCallback(async () => {
+    if (!planAddresses || !address || (planAddresses as `0x${string}`[]).length === 0) {
+      setPendingClaims([]);
+      return;
+    }
+    setLoadingClaims(true);
+    const results: PendingClaim[] = [];
+    for (const addr of planAddresses as `0x${string}`[]) {
+      try {
+        const details = await readContract(config, {
+          address: addr,
+          abi: planAbi,
+          functionName: "getPlanDetails",
+        }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+
+        const claimCount = Number(details[7]);
+        for (let i = 0; i < claimCount; i++) {
+          const claim = await readContract(config, {
             address: addr,
             abi: planAbi,
-            functionName: "getPlanDetails",
-          }) as [string, string, [string, string, string], bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+            functionName: "getClaimInfo",
+            args: [BigInt(i)],
+          }) as Claim;
 
-          const claimCount = Number(details[7]);
-          for (let i = 0; i < claimCount; i++) {
-            const claim = await readContract(config, {
-              address: addr,
-              abi: planAbi,
-              functionName: "getClaimInfo",
-              args: [BigInt(i)],
-            }) as Claim;
+          const hasVoted = await readContract(config, {
+            address: addr,
+            abi: planAbi,
+            functionName: "verifierVoted",
+            args: [BigInt(i), address],
+          }) as boolean;
 
-            const hasVoted = await readContract(config, {
-              address: addr,
-              abi: planAbi,
-              functionName: "verifierVoted",
-              args: [BigInt(i), address],
-            }) as boolean;
-
-            results.push({
-              planAddress: addr,
-              planName: details[1],
-              claimId: i,
-              claim,
-              hasVoted,
-            });
-          }
-        } catch {
-          // skip
+          results.push({
+            planAddress: addr,
+            planName: details[1],
+            claimId: i,
+            claim,
+            hasVoted,
+          });
         }
+      } catch (err) {
+        console.error(`Failed to fetch claims for plan ${addr}:`, err);
+        toast.error(`Failed to load claims for a plan`);
       }
-      setPendingClaims(results);
-      setLoadingClaims(false);
     }
-    fetchClaims();
+    setPendingClaims(results);
+    setLoadingClaims(false);
   }, [planAddresses, address]);
+
+  useEffect(() => {
+    fetchClaims();
+  }, [fetchClaims, fetchVersion]);
 
   async function handleVote(planAddress: string, claimId: number, approve: boolean) {
     try {
       await vote(planAddress as `0x${string}`, claimId, approve);
       toast.success(approve ? "Approved!" : "Rejected!");
-      window.location.reload();
-    } catch {
+      setFetchVersion((v) => v + 1);
+    } catch (err) {
+      console.error("Vote failed:", err);
       toast.error("Vote failed");
     }
   }

@@ -318,6 +318,24 @@ describe("InheritancePlan", function () {
       expect(await plan.getClaimCount()).to.equal(2);
     });
 
+    it("should reject duplicate active claim from same heir", async function () {
+      await time.increase(SIXTY_DAYS + 1);
+      await plan.connect(heir1).submitClaim("QmCID1");
+      await expect(
+        plan.connect(heir1).submitClaim("QmCID2")
+      ).to.be.revertedWith("Active claim exists");
+    });
+
+    it("should allow re-claim after rejection", async function () {
+      await time.increase(SIXTY_DAYS + 1);
+      await plan.connect(heir1).submitClaim("QmCID1");
+      await plan.connect(verifier1).vote(0, false);
+      await plan.connect(verifier2).vote(0, false);
+      // After rejection, should be able to submit again
+      await plan.connect(heir1).submitClaim("QmCID2");
+      expect(await plan.getClaimCount()).to.equal(2);
+    });
+
     it("should store claim info correctly", async function () {
       await time.increase(SIXTY_DAYS + 1);
       await plan.connect(heir1).submitClaim("QmTestCID");
